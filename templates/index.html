@@ -1,35 +1,334 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+
 <head>
-<title>Face Recognition System</title>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Face Recognition Attendance System</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
 </head>
 
 <body>
 
-<h1>AI Face Recognition System</h1>
+<nav class="navbar navbar-expand-lg navbar-dark shadow-sm">
 
-<a href="/register">
-<button>Register User</button>
-</a>
+    <div class="container">
 
-<br><br>
+        <a class="navbar-brand fw-bold" href="#">
+            Face Recognition Attendance
+        </a>
 
-<a href="/train">
-<button>Train Model</button>
-</a>
+    </div>
 
-<br><br>
+</nav>
 
-<a href="/recognize">
-<button>Start Recognition</button>
-</a>
+<div class="container py-5">
 
-<br><br>
+    <!-- Header -->
 
-<a href="/delete">
-<button>Delete User</button>
-</a>
+    <div class="row mb-4">
 
+        <div class="col-lg-8">
+
+            <h1 class="page-title">
+                Face Recognition Attendance System
+            </h1>
+
+            <p class="subtitle">
+                Secure • Fast • Reliable Attendance Management
+            </p>
+
+        </div>
+
+    </div>
+
+
+    <!-- Register & Delete -->
+
+    <div class="row g-4">
+
+        <div class="col-lg-6">
+
+            <div class="dashboard-card">
+
+                <h4 class="section-title">
+                    Register User
+                </h4>
+
+                <form action="/register" method="POST">
+
+                    <div class="mb-3">
+
+                        <label class="form-label">
+                            Full Name
+                        </label>
+
+                        <input
+                            type="text"
+                            class="form-control"
+                            name="name"
+                            required>
+
+                    </div>
+
+                    <div class="mb-4">
+
+                        <label class="form-label">
+                            Email
+                        </label>
+
+                        <input
+                            type="email"
+                            class="form-control"
+                            name="email"
+                            required>
+
+                    </div>
+
+                    <button class="btn btn-success action-btn w-100">
+                        Register User
+                    </button>
+
+                </form>
+
+            </div>
+
+        </div>
+
+        <div class="col-lg-6">
+
+            <div class="dashboard-card">
+
+                <h4 class="section-title">
+                    Delete User
+                </h4>
+
+                <form action="/delete" method="POST">
+
+                    <div class="mb-4">
+
+                        <label class="form-label">
+                            Username
+                        </label>
+
+                        <input
+                            type="text"
+                            class="form-control"
+                            name="username"
+                            required>
+
+                    </div>
+
+                    <button class="btn btn-danger action-btn w-100">
+                        Delete User
+                    </button>
+
+                </form>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- Action Buttons -->
+
+    <div class="row mt-3">
+
+        <div class="col-md-6 mb-3">
+
+            <form action="/train">
+
+                <button class="btn btn-warning action-btn w-100">
+                    Train AI Model
+                </button>
+
+            </form>
+
+        </div>
+
+        <div class="col-md-6 mb-3">
+
+            <form action="/recognize">
+
+                <button class="btn btn-primary action-btn w-100">
+                    Start Recognition
+                </button>
+
+            </form>
+
+        </div>
+
+    </div>
+
+
+    <!-- Last Recognition -->
+
+    {% if recognition %}
+
+    <div class="dashboard-card mt-5">
+
+        <h3 class="section-title">
+            Last Recognition
+        </h3>
+
+        <div class="row">
+
+            <div class="col-md-4">
+
+                <strong>Name</strong>
+
+                <p>{{ recognition.name }}</p>
+
+            </div>
+
+            <div class="col-md-4">
+
+                <strong>Date</strong>
+
+                <p>{{ recognition.date }}</p>
+
+            </div>
+
+            <div class="col-md-4">
+
+                <strong>Time</strong>
+
+                <p>{{ recognition.time }}</p>
+
+            </div>
+
+        </div>
+
+        <div class="alert alert-success mt-3">
+
+            Attendance Recorded Successfully
+
+        </div>
+
+    </div>
+
+    {% endif %}
+
+
+    <!-- Dashboard Statistics -->
+
+    <div class="row mt-5">
+
+        <div class="col-lg-3 col-md-6 mb-4">
+
+            <div class="dashboard-stat">
+
+                <div class="stat-title">
+                    Total Users
+                </div>
+
+                <div class="stat-value">
+                    {{ total_users }}
+                </div>
+
+            </div>
+
+        </div>
+
+        <div class="col-lg-3 col-md-6 mb-4">
+
+            <div class="dashboard-stat">
+
+                <div class="stat-title">
+                    Today's Attendance
+                </div>
+
+                <div class="stat-value">
+                    {{ today_attendance }}
+                </div>
+
+            </div>
+
+        </div>
+
+        <div class="col-lg-3 col-md-6 mb-4">
+
+            <div class="dashboard-stat">
+
+                <div class="stat-title">
+                    Total Records
+                </div>
+
+                <div class="stat-value">
+                    {{ total_attendance }}
+                </div>
+
+            </div>
+
+        </div>
+
+        <div class="col-lg-3 col-md-6 mb-4">
+
+            <div class="dashboard-stat">
+
+                <div class="stat-title">
+                    AI Model
+                </div>
+
+                <div class="stat-status">
+
+                    {% if model_status == "Ready" %}
+
+                    <span class="badge bg-success">
+                        Ready
+                    </span>
+
+                    {% else %}
+
+                    <span class="badge bg-danger">
+                        Not Trained
+                    </span>
+
+                    {% endif %}
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- Footer -->
+
+    <footer class="text-center mt-5">
+
+        <hr>
+
+        <p class="text-muted">
+
+            © 2026 Anuj Patel • Face Recognition Attendance System
+
+        </p>
+
+    </footer>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"></script>
+
+<script src="{{ url_for('static', filename='js/script.js') }}"></script>
 
 </body>
 

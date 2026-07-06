@@ -37,52 +37,95 @@
 
 
 
-import face_recognition
 import os
 import pickle
+import face_recognition
+
+from database.db import get_connection
 
 dataset_path = "dataset"
 model_path = "models/encodings.pickle"
 
 known_encodings = []
 known_names = []
+known_ids = []
+known_emails = []
 
+print("===================================")
 print("Training model...")
+print("===================================")
 
-# Loop through each user folder
-for user in os.listdir(dataset_path):
+# Check dataset folder
+if not os.path.exists(dataset_path):
+    print("Dataset folder not found!")
+    exit()
 
-    user_path = os.path.join(dataset_path, user)
+# Connect to MySQL
+conn = get_connection()
+cursor = conn.cursor(dictionary=True)
 
-    # ✅ Skip hidden files like .DS_Store
-    if not os.path.isdir(user_path):
+cursor.execute("SELECT id, name, email FROM users")
+users = cursor.fetchall()
+
+if len(users) == 0:
+    print("No users found in database.")
+    cursor.close()
+    conn.close()
+    exit()
+
+for user in users:
+
+    user_id = user["id"]
+    name = user["name"]
+    email = user["email"]
+
+    print(f"\nProcessing User: {name} (ID: {user_id})")
+
+    # Dataset folder is USER ID
+    user_path = os.path.join(dataset_path, str(user_id))
+
+    if not os.path.exists(user_path):
+        print(f"❌ Folder not found: {user_path}")
         continue
 
-    # Loop through each image inside user folder
+    image_count = 0
+
     for image_name in os.listdir(user_path):
 
-        image_path = os.path.join(user_path, image_name)
-
-        # ✅ Skip hidden/system files
         if not image_name.lower().endswith((".jpg", ".jpeg", ".png")):
             continue
 
+        image_path = os.path.join(user_path, image_name)
+
         try:
+
             image = face_recognition.load_image_file(image_path)
             encodings = face_recognition.face_encodings(image)
 
-            if len(encodings) > 0:
-                known_encodings.append(encodings[0])
-                known_names.append(user)
+            if len(encodings) == 0:
+                print(f"No face found in {image_name}")
+                continue
+
+            known_encodings.append(encodings[0])
+            known_names.append(name)
+            known_ids.append(user_id)
+            known_emails.append(email)
+
+            image_count += 1
 
         except Exception as e:
-            print(f"Error processing {image_path}: {e}")
-            continue
+            print(f"Error processing {image_name}: {e}")
 
-# Save encodings
+    print(f"Encoded {image_count} image(s).")
+
+cursor.close()
+conn.close()
+
 data = {
     "encodings": known_encodings,
-    "names": known_names
+    "names": known_names,
+    "ids": known_ids,
+    "emails": known_emails
 }
 
 os.makedirs("models", exist_ok=True)
@@ -90,5 +133,9 @@ os.makedirs("models", exist_ok=True)
 with open(model_path, "wb") as f:
     pickle.dump(data, f)
 
-print("Model trained successfully.")
-print(f"Total faces encoded: {len(known_encodings)}")
+print("\n===================================")
+print("Training Complete")
+print(f"Total Faces Encoded : {len(known_encodings)}")
+print(f"Total Users Encoded : {len(set(known_ids))}")
+print("Model saved to:", model_path)
+print("===================================")

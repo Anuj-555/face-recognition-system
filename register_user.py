@@ -55,15 +55,30 @@
 
 import cv2
 import os
+import sys
 from database.db import get_connection
 
-# Take user name from terminal
-name = input("Enter Name: ")
-email = input("Enter Email: ")
+# Check command-line arguments
+if len(sys.argv) < 3:
+    print("Usage: python register_user.py <name> <email>")
+    sys.exit()
+
+name = sys.argv[1].strip()
+email = sys.argv[2].strip()
 
 # Connect to database
 conn = get_connection()
 cursor = conn.cursor()
+
+# Check if user already exists
+cursor.execute("SELECT id FROM users WHERE name = %s", (name,))
+existing_user = cursor.fetchone()
+
+if existing_user:
+    print(f"User '{name}' already exists.")
+    cursor.close()
+    conn.close()
+    sys.exit()
 
 # Insert user into database
 query = "INSERT INTO users (name, email) VALUES (%s, %s)"
@@ -73,19 +88,23 @@ conn.commit()
 # Get generated user id
 user_id = cursor.lastrowid
 
-# Create folder for user images
-dataset_path = f"dataset/{user_id}"
+# Close database connection
+cursor.close()
+conn.close()
+
+# Create folder using user id
+dataset_path = os.path.join("dataset", str(user_id))
 os.makedirs(dataset_path, exist_ok=True)
 
-# ---- STEP 4 FIX IS HERE ----
-# Use macOS camera backend
+# Open camera (macOS)
 cam = cv2.VideoCapture(0, cv2.CAP_AVFOUNDATION)
 
 if not cam.isOpened():
     print("Camera could not be opened")
-    exit()
+    sys.exit()
 
 print("Capturing images...")
+print("Press 'C' to capture each image.")
 
 count = 0
 
@@ -93,27 +112,29 @@ while True:
 
     ret, frame = cam.read()
 
-    # STEP 3 FIX (prevent crash)
     if not ret:
         print("Camera not detected")
         break
 
     cv2.imshow("Register Face", frame)
 
-    key = cv2.waitKey(1)
+    key = cv2.waitKey(1) & 0xFF
 
-    # Press C to capture image
-    if key == ord('c'):
-        img_path = f"{dataset_path}/{count}.jpg"
+    if key == ord("c"):
+        img_path = os.path.join(dataset_path, f"{count}.jpg")
         cv2.imwrite(img_path, frame)
-        print("Saved:", img_path)
+        print(f"Saved: {img_path}")
         count += 1
 
     # Stop after 10 images
     if count >= 10:
         break
 
+    # ESC to cancel
+    if key == 27:
+        break
+
 cam.release()
 cv2.destroyAllWindows()
 
-print("User registered successfully")
+print("User registered successfully.")
