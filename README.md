@@ -276,9 +276,9 @@ Some features planned for future versions:
 
 Software Engineering Student
 
-GitHub: https://github.com/your-username
+GitHub: https://github.com/Anuj-555
 
-LinkedIn: https://linkedin.com/in/your-profile
+LinkedIn: https://www.linkedin.com/in/anuj-rajesh-patel/
 
 ---
 
