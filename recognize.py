@@ -1,117 +1,143 @@
-import cv2
+import os
 import face_recognition
 import pickle
 import json
-
-from database.db import get_connection
 from datetime import datetime
 
-print("Loading encodings...")
+from database.db import get_connection
 
-# Load trained model
-with open("models/encodings.pickle", "rb") as f:
-    data = pickle.load(f)
 
-print("Encodings loaded successfully.")
+# =========================
+# Load Model
+# =========================
+if os.path.exists("models/encodings.pickle"):
 
-# Open webcam
-video = cv2.VideoCapture(0, cv2.CAP_AVFOUNDATION)
+    print("Loading encodings...")
 
-if not video.isOpened():
-    print("Camera not working!")
-    exit()
+    with open("models/encodings.pickle", "rb") as f:
+        data = pickle.load(f)
 
-# Database connection
-conn = get_connection()
-cursor = conn.cursor()
+    print("Encodings loaded successfully.")
 
-marked_users = set()
+else:
 
-while True:
+    data = {
+        "encodings": [],
+        "names": [],
+        "ids": []
+    }
 
-    ret, frame = video.read()
 
-    if not ret:
-        print("Failed to grab frame")
-        break
+# =========================
+# Recognize Frame
+# =========================
+def recognize_frame(rgb_frame):
 
-    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    if len(data["encodings"]) == 0:
+        return {
+            "success": False,
+            "message": "Model not trained."
+        }
 
-    boxes = face_recognition.face_locations(rgb)
-    encodings = face_recognition.face_encodings(rgb, boxes)
+    boxes = face_recognition.face_locations(rgb_frame)
 
-    for encoding, box in zip(encodings, boxes):
+    encodings = face_recognition.face_encodings(
+        rgb_frame,
+        boxes
+    )
 
-        name = "Unknown"
+    if len(encodings) == 0:
+        return {
+            "success": False,
+            "message": "No face detected."
+        }
 
-        if len(data["encodings"]) > 0:
+    conn = get_connection()
+    cursor = conn.cursor()
 
-            face_distances = face_recognition.face_distance(
-                data["encodings"], encoding
-            )
+    for encoding in encodings:
 
-            best_match_index = face_distances.argmin()
-
-            # Lower distance = better match
-            if face_distances[best_match_index] < 0.50:
-
-                name = data["names"][best_match_index]
-                user_id = data["ids"][best_match_index]
-
-                if user_id not in marked_users:
-
-                    now = datetime.now()
-
-                    date = now.date()
-                    time = now.strftime("%H:%M:%S")
-
-                    cursor.execute(
-                        """
-                        INSERT INTO attendance(name, date, time)
-                        VALUES(%s,%s,%s)
-                        """,
-                        (name, date, time),
-                    )
-
-                    conn.commit()
-
-                    marked_users.add(user_id)
-
-                    result = {
-                        "id": user_id,
-                        "name": name,
-                        "date": str(date),
-                        "time": time,
-                    }
-
-                    with open("last_recognition.json", "w") as file:
-                        json.dump(result, file, indent=4)
-
-                    print(f"Attendance marked for {name}")
-
-        top, right, bottom, left = box
-
-        cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
-
-        cv2.putText(
-            frame,
-            name,
-            (left, top - 10),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.8,
-            (0, 255, 0),
-            2,
+        face_distances = face_recognition.face_distance(
+            data["encodings"],
+            encoding
         )
 
-    cv2.imshow("Face Recognition", frame)
+        best_match_index = face_distances.argmin()
 
-    if cv2.waitKey(1) & 0xFF == 27:
-        break
+        if face_distances[best_match_index] < 0.50:
 
-video.release()
-cv2.destroyAllWindows()
+            name = data["names"][best_match_index]
+            user_id = data["ids"][best_match_index]
 
-cursor.close()
-conn.close()
+            now = datetime.now()
 
-print("System closed.")
+            attendance_date = now.date()
+            attendance_time = now.strftime("%H:%M:%S")
+
+            cursor.execute(
+                """
+                SELECT id
+                FROM attendance
+                WHERE name=%s
+                AND date=%s
+                """,
+                (
+                    name,
+                    attendance_date
+                )
+            )
+
+            existing = cursor.fetchone()
+
+            if not existing:
+
+                cursor.execute(
+                    """
+                    INSERT INTO attendance(name,date,time)
+                    VALUES(%s,%s,%s)
+                    """,
+                    (
+                        name,
+                        attendance_date,
+                        attendance_time
+                    )
+                )
+
+                conn.commit()
+
+            result = {
+                "id": user_id,
+                "name": name,
+                "date": str(attendance_date),
+                "time": attendance_time
+            }
+
+            with open(
+                "last_recognition.json",
+                "w"
+            ) as file:
+                json.dump(
+                    result,
+                    file,
+                    indent=4
+                )
+
+            cursor.close()
+            conn.close()
+
+            return {
+                "success": True,
+                "recognized": True,
+                "name": name,
+                "date": str(attendance_date),
+                "time": attendance_time
+            }
+
+    cursor.close()
+    conn.close()
+
+    return {
+        "success": True,
+        "recognized": False,
+        "message": "Unknown face."
+    }

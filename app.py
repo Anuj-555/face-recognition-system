@@ -1,10 +1,14 @@
-from flask import Flask, render_template, redirect, request
+from flask import Flask, render_template, redirect, request, jsonify
 import os
-import sys
 import json
+import base64
+import numpy as np
+from io import BytesIO
+from PIL import Image
 from datetime import date
 
 from database.db import get_connection
+from recognize import recognize_frame
 
 app = Flask(__name__)
 
@@ -24,15 +28,16 @@ def home():
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
 
-    # Total registered users
-    cursor.execute("SELECT COUNT(*) AS total_users FROM users")
+    cursor.execute(
+        "SELECT COUNT(*) AS total_users FROM users"
+    )
     total_users = cursor.fetchone()["total_users"]
 
-    # Total attendance records
-    cursor.execute("SELECT COUNT(*) AS total_attendance FROM attendance")
+    cursor.execute(
+        "SELECT COUNT(*) AS total_attendance FROM attendance"
+    )
     total_attendance = cursor.fetchone()["total_attendance"]
 
-    # Today's attendance
     cursor.execute(
         """
         SELECT COUNT(*) AS today_attendance
@@ -47,7 +52,6 @@ def home():
     cursor.close()
     conn.close()
 
-    # AI Model Status
     model_status = "Ready"
 
     if not os.path.exists("models/encodings.pickle"):
@@ -69,12 +73,59 @@ def home():
 @app.route("/register", methods=["POST"])
 def register():
 
-    name = request.form["name"]
-    email = request.form["email"]
+    name = request.form["name"].strip()
+    email = request.form["email"].strip()
 
-    os.system(f'{sys.executable} register_user.py "{name}" "{email}"')
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
 
-    return redirect("/")
+    cursor.execute(
+        "SELECT id FROM users WHERE name=%s",
+        (name,)
+    )
+
+    existing_user = cursor.fetchone()
+
+    if existing_user:
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            "success": False,
+            "message": "User already exists."
+        })
+
+    cursor.execute(
+        """
+        INSERT INTO users(name,email)
+        VALUES(%s,%s)
+        """,
+        (name, email)
+    )
+
+    conn.commit()
+
+    user_id = cursor.lastrowid
+
+    dataset_path = os.path.join(
+        "dataset",
+        str(user_id)
+    )
+
+    os.makedirs(
+        dataset_path,
+        exist_ok=True
+    )
+
+    cursor.close()
+    conn.close()
+
+    return jsonify({
+        "success": True,
+        "user_id": user_id,
+        "message": "User created successfully."
+    })
 
 
 # =========================
@@ -83,18 +134,7 @@ def register():
 @app.route("/train")
 def train():
 
-    os.system(f"{sys.executable} train_model.py")
-
-    return redirect("/")
-
-
-# =========================
-# Start Recognition
-# =========================
-@app.route("/recognize")
-def recognize():
-
-    os.system(f"{sys.executable} recognize.py")
+    os.system("python3 train_model.py")
 
     return redirect("/")
 
@@ -112,7 +152,6 @@ def delete_user():
         conn = get_connection()
         cursor = conn.cursor(dictionary=True)
 
-        # Find user id
         cursor.execute(
             "SELECT id FROM users WHERE name=%s",
             (username,)
@@ -144,6 +183,110 @@ def delete_user():
         conn.close()
 
     return redirect("/")
+
+
+# =========================
+# Upload Images
+# =========================
+@app.route("/upload-image", methods=["POST"])
+def upload_image():
+
+    data = request.get_json()
+
+    user_id = data.get("user_id")
+    image_number = data.get("image_number")
+    image_data = data.get("image")
+
+    if not user_id or image_data is None:
+
+        return jsonify({
+            "success": False,
+            "message": "Missing data."
+        }), 400
+
+    try:
+
+        image_data = image_data.split(",")[1]
+
+        image_bytes = base64.b64decode(
+            image_data
+        )
+
+        image = Image.open(
+            BytesIO(image_bytes)
+        )
+
+        dataset_path = os.path.join(
+            "dataset",
+            str(user_id)
+        )
+
+        os.makedirs(
+            dataset_path,
+            exist_ok=True
+        )
+
+        image_path = os.path.join(
+            dataset_path,
+            f"{image_number}.jpg"
+        )
+
+        image.save(image_path)
+
+        return jsonify({
+            "success": True,
+            "message": "Image saved successfully."
+        })
+
+    except Exception as e:
+
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 500
+
+
+# =========================
+# Browser Recognition
+# =========================
+@app.route("/recognize-frame", methods=["POST"])
+def recognize_browser_frame():
+
+    try:
+
+        data = request.get_json()
+
+        image_data = data.get("image")
+
+        if not image_data:
+
+            return jsonify({
+                "success": False,
+                "message": "No image received."
+            })
+
+        image_data = image_data.split(",")[1]
+
+        image_bytes = base64.b64decode(
+            image_data
+        )
+
+        image = Image.open(
+            BytesIO(image_bytes)
+        ).convert("RGB")
+
+        frame = np.array(image)
+
+        result = recognize_frame(frame)
+
+        return jsonify(result)
+
+    except Exception as e:
+
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 500
 
 
 if __name__ == "__main__":
